@@ -1,0 +1,23 @@
+{
+  "name": "opencode-dynamic-title",
+  "version": "1.0.0",
+  "description": "Dynamic title manager plugin for OpenCode that adapts chat titles in the background as conversations evolve.",
+  "main": "index.ts",
+  "type": "module",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "chat-titles",
+    "session-management"
+  ],
+  "author": "Sugam",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sugamsss/opencode-dynamic-title"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "typescript": "^5.8.2"
+  }
+}
