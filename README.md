@@ -11,8 +11,9 @@ In OpenCode (and similar AI harnesses), chat titles are typically generated once
 This plugin brings the dynamic naming pattern to OpenCode:
 
 1. **Top-Level Context Injection**: Before each model turn, `ctx.session.hook("context")` unshifts an instruction containing the session's live title.
-2. **Silent Evaluation**: If the current title is generic or if the conversation has evolved past the initial request, the model calls the built-in `session_rename` tool with a concise 2–4 word title.
+2. **Silent Evaluation**: If the current title is generic or if the conversation has evolved past the initial request, the model calls the plugin-registered `session_rename` tool with a concise 2–4 word title.
 3. **Zero Text / Stream Pollution**: The agent executes the rename silently via OpenCode's session API. No bracketed tags, HTML comments, or acknowledgments leak into user chat messages.
+4. **Malformed History Guard**: Before dispatch, malformed tool definitions and old malformed tool parts are removed from the outgoing request snapshot. Stored history is left untouched.
 
 ## Installation
 
