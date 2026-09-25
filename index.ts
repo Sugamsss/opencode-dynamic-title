@@ -1,37 +1,27 @@
-const TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
+const VALID_TOOL_NAME = /^[a-zA-Z0-9_-]+$/
 
-const removeInvalidTools = (event: any) => {
-  const tools = event?.tools
-  if (!tools || typeof tools !== "object") return
+const safeToolName = (name: string) => name.replace(/[^a-zA-Z0-9_-]/g, "_")
 
-  if (Array.isArray(tools)) {
-    event.tools = tools.filter((tool: any) => {
-      return typeof tool?.name !== "string" || TOOL_NAME_PATTERN.test(tool.name)
-    })
-    return
+// Providers reject tool names outside [a-zA-Z0-9_-]. Older sessions can hold calls such as
+// "antigravity:session_rename". Fix the outgoing request only, and rename both the call and its
+// result so every call/result pair stays intact. Stored history is not touched.
+const sanitizeToolNames = (event: any) => {
+  const tools = event.tools
+  if (tools && typeof tools === "object") {
+    for (const name of Object.keys(tools)) {
+      if (!VALID_TOOL_NAME.test(name)) delete tools[name]
+    }
   }
 
-  for (const name of Object.keys(tools)) {
-    if (!TOOL_NAME_PATTERN.test(name)) delete tools[name]
-  }
-}
-
-const removeInvalidToolHistory = (event: any) => {
-  if (!Array.isArray(event?.messages)) return
-
+  if (!Array.isArray(event.messages)) return
   for (const message of event.messages) {
     if (!Array.isArray(message?.content)) continue
-
-    message.content = message.content.filter((part: any) => {
-      if (part?.type !== "tool" || typeof part.name !== "string") return true
-      return TOOL_NAME_PATTERN.test(part.name)
+    message.content = message.content.map((part: any) => {
+      if (part?.type !== "tool-call" && part?.type !== "tool-result") return part
+      if (typeof part.name !== "string" || VALID_TOOL_NAME.test(part.name)) return part
+      return { ...part, name: safeToolName(part.name) }
     })
   }
-}
-
-const sanitizeToolNames = (event: any) => {
-  removeInvalidTools(event)
-  removeInvalidToolHistory(event)
 }
 
 const instruction = (title: string) =>
