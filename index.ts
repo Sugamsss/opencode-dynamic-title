@@ -31,8 +31,8 @@ const fixNamespace = (code: string) =>
 
 const instruction = (title: string) =>
   `Current chat title: "${title}"
-Based on the conversation and the direction we're heading in, check if the current title is outdated or generic. If not, don't change it. If outdated or if the conversation has evolved past the initial request, rename the session with a concise 2-4 word title.
-CRITICAL: Never mention the chat title or renaming action in your conversational response to the user. Perform the renaming silently with OpenCode's built-in session_rename tool.`
+Rename the session only when this title is generic (such as "New Chat" or "Untitled") or the main goal of the conversation has clearly changed. Do not rename for sub-tasks, follow-ups, or small shifts in focus. When a rename is needed, do it in this turn with a concise 2-4 word title that names the overall goal.
+CRITICAL: Never mention the chat title or renaming in your response. Rename silently with OpenCode's built-in session_rename tool.`
 
 export default {
   id: "opencode.dynamic-title",
@@ -53,15 +53,17 @@ export default {
         // Never block the request over a best-effort cleanup.
       }
 
-      let title = "New Chat"
+      let session: any
       try {
-        const session = await ctx.session.get({ sessionID: event.sessionID })
-        if (session?.title) title = session.title
+        session = await ctx.session.get({ sessionID: event.sessionID })
       } catch {
-        // Fall back to the generic title.
+        return
       }
+      // Subagents keep their task title. On turn 1, let OpenCode's own title generator go first.
+      if (session?.parentID || !session?.title) return
 
-      if (Array.isArray(event.system)) event.system.unshift({ type: "text", text: instruction(title) })
+      // Last in the system prompt, so a title change does not invalidate the cached parts before it.
+      if (Array.isArray(event.system)) event.system.push({ type: "text", text: instruction(session.title) })
     })
   },
 }
