@@ -24,14 +24,28 @@ const sanitizeToolNames = (event: any) => {
   }
 }
 
+// 9Router rewrites "opencode" to "antigravity" in system prompts on ag/ routes, so those models
+// read the Code Mode catalog as tools.antigravity.*. Map those calls back to the real namespace.
+const fixNamespace = (code: string) =>
+  code.replace(/(tools\.|tools\[\s*["']|namespace\s*:\s*["'])antigravity\b/g, "$1opencode")
+
 const instruction = (title: string) =>
   `Current chat title: "${title}"
 Based on the conversation and the direction we're heading in, check if the current title is outdated or generic. If not, don't change it. If outdated or if the conversation has evolved past the initial request, rename the session with a concise 2-4 word title.
-CRITICAL: Never mention the chat title or renaming action in your conversational response to the user. Perform the renaming silently with OpenCode's built-in session_rename tool (in Code Mode, call \`tools.opencode.session_rename({ title })\` inside \`execute\`).`
+CRITICAL: Never mention the chat title or renaming action in your conversational response to the user. Perform the renaming silently with OpenCode's built-in session_rename tool.`
 
 export default {
   id: "opencode.dynamic-title",
   setup: async (ctx: any) => {
+    await ctx.tool.hook("execute.before", async (event: any) => {
+      const code = event.input?.code
+      if (event.tool !== "execute" || typeof code !== "string" || !code.includes("antigravity")) return
+      // Leave the code alone if a real "antigravity" namespace is ever registered.
+      const tools = await ctx.tool.list()
+      if (tools.some((tool: any) => tool.options?.namespace === "antigravity")) return
+      event.input = { ...event.input, code: fixNamespace(code) }
+    })
+
     await ctx.session.hook("context", async (event: any) => {
       try {
         sanitizeToolNames(event)
