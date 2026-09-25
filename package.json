@@ -1,6 +1,6 @@
 {
   "name": "opencode-dynamic-title",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Dynamic title manager plugin for OpenCode that adapts chat titles in the background as conversations evolve.",
   "main": "index.ts",
   "type": "module",

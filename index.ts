@@ -1,5 +1,3 @@
-let pluginContext: any = null
-
 const TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
 
 const removeInvalidTools = (event: any) => {
@@ -36,63 +34,30 @@ const sanitizeToolNames = (event: any) => {
   removeInvalidToolHistory(event)
 }
 
+const instruction = (title: string) =>
+  `Current chat title: "${title}"
+Based on the conversation and the direction we're heading in, check if the current title is outdated or generic. If not, don't change it. If outdated or if the conversation has evolved past the initial request, rename the session with a concise 2-4 word title.
+CRITICAL: Never mention the chat title or renaming action in your conversational response to the user. Perform the renaming silently with OpenCode's built-in session_rename tool (in Code Mode, call \`tools.opencode.session_rename({ title })\` inside \`execute\`).`
+
 export default {
   id: "opencode.dynamic-title",
   setup: async (ctx: any) => {
-    pluginContext = ctx
+    await ctx.session.hook("context", async (event: any) => {
+      try {
+        sanitizeToolNames(event)
+      } catch {
+        // Never block the request over a best-effort cleanup.
+      }
 
-    if (ctx.tool?.transform && ctx.session?.rename) {
-      await ctx.tool.transform((editor: any) => {
-        if (editor.get?.("session_rename")) return
+      let title = "New Chat"
+      try {
+        const session = await ctx.session.get({ sessionID: event.sessionID })
+        if (session?.title) title = session.title
+      } catch {
+        // Fall back to the generic title.
+      }
 
-        editor.add({
-          name: "session_rename",
-          description: "Silently rename the current session.",
-          input: {
-            type: "object",
-            properties: {
-              title: { type: "string", minLength: 1 },
-            },
-            required: ["title"],
-            additionalProperties: false,
-          },
-          execute: async (input: any, tool: any) => {
-            await ctx.session.rename({ sessionID: tool.sessionID, title: input.title })
-            return { content: "Session title updated." }
-          },
-        })
-      })
-    }
-
-    if (ctx.session?.hook) {
-      await ctx.session.hook("context", async (event: any) => {
-        try {
-          // Check current title
-          let currentTitle = "New Chat"
-          if (ctx.session?.get) {
-            const session = await ctx.session.get({ sessionID: event.sessionID })
-            if (session?.title) {
-              currentTitle = session.title
-            }
-          }
-
-          const instruction = 
-`Current chat title: "${currentTitle}"
-Based on the conversation and the direction we're heading in, check if the current title is outdated or generic. If not, don't change it. If outdated or if the conversation has evolved past the initial request, rename the session with a concise 2-4 word title.
-CRITICAL: Never mention the chat title or renaming action in your conversational response to the user. Perform the renaming silently with the session_rename tool.`
-
-          if (Array.isArray(event.system)) {
-            event.system.unshift({ type: "text", text: instruction })
-          } else if (typeof event.system === "string") {
-            event.system = instruction + "\n\n" + event.system
-          }
-
-          sanitizeToolNames(event)
-        } catch {
-          // Silent fallback to avoid disrupting session execution
-        }
-      })
-    }
+      if (Array.isArray(event.system)) event.system.unshift({ type: "text", text: instruction(title) })
+    })
   },
-  server: async () => ({}),
 }
