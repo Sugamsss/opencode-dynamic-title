@@ -1,11 +1,9 @@
 const VALID_TOOL_NAME = /^[a-zA-Z0-9_-]+$/
 
-const safeToolName = (name: string) => name.replace(/[^a-zA-Z0-9_-]/g, "_")
+export const safeToolName = (name: string) => name.replace(/[^a-zA-Z0-9_-]/g, "_")
 
-// Providers reject tool names outside [a-zA-Z0-9_-]. Older sessions can hold calls such as
-// "antigravity:session_rename". Fix the outgoing request only, and rename both the call and its
-// result so every call/result pair stays intact. Stored history is not touched.
-const sanitizeToolNames = (event: any) => {
+// Providers reject tool names outside [a-zA-Z0-9_-]. Fix outgoing requests only.
+export const sanitizeToolNames = (event: any) => {
   const tools = event.tools
   if (tools && typeof tools === "object") {
     for (const name of Object.keys(tools)) {
@@ -26,13 +24,34 @@ const sanitizeToolNames = (event: any) => {
 
 // 9Router rewrites "opencode" to "antigravity" in system prompts on ag/ routes, so those models
 // read the Code Mode catalog as tools.antigravity.*. Map those calls back to the real namespace.
-const fixNamespace = (code: string) =>
+export const fixNamespace = (code: string) =>
   code.replace(/(tools\.|tools\[\s*["']|namespace\s*:\s*["'])antigravity\b/g, "$1opencode")
 
-const instruction = (title: string) =>
-  `Current chat title: "${title}"
-Rename the session only when this title is generic (such as "New Chat" or "Untitled") or the main goal of the conversation has clearly changed. Do not rename for sub-tasks, follow-ups, or small shifts in focus. When a rename is needed, do it in this turn with a concise 2-4 word title that names the overall goal.
-CRITICAL: Never mention the chat title or renaming in your response. Rename silently with OpenCode's built-in session_rename tool.`
+export const isGenericTitle = (title?: string): boolean => {
+  if (!title) return true
+  const lower = title.toLowerCase().trim()
+  return (
+    lower === "" ||
+    lower === "untitled" ||
+    lower.startsWith("new session") ||
+    lower.startsWith("new chat") ||
+    lower.startsWith("chat ") ||
+    lower.startsWith("session ")
+  )
+}
+
+export const buildTitleInstruction = (title: string): string => {
+  const generic = isGenericTitle(title)
+  return [
+    `Current chat title: "${title}"`,
+    generic
+      ? `ACTION REQUIRED: This session currently has an unnamed/generic title. Rename it as your FIRST tool call before working on the task (concise 2-4 words naming the core goal) so the user's workspace updates immediately. Your SECOND tool call must be 'planner({ init: [...] })' to initialize the roadmap before touching code or running tools.`
+      : `Rename the session only when the overarching goal has fundamentally changed or expanded beyond this title. Keep it stable during ordinary follow-ups. If a rename is needed, execute it as your FIRST tool call in this turn, followed immediately by 'planner({ init: [...] })'. If no rename is needed, 'planner' must be your FIRST tool call before touching code or running tools.`,
+    `Call Code Mode: \`await tools.opencode.session_rename({ title: "Concise 2-4 Words" })\`.`,
+    `CRITICAL: Never mention the chat title or renaming in your response. Perform the rename silently.`,
+    `ORDER OF OPERATIONS: (1) session_rename (if generic/changed) -> (2) planner({ init: [...] }) -> (3) execute work. NEVER work first and retrospectively plan later.`,
+  ].join("\n")
+}
 
 export default {
   id: "opencode.dynamic-title",
@@ -59,11 +78,16 @@ export default {
       } catch {
         return
       }
-      // Subagents keep their task title. On turn 1, let OpenCode's own title generator go first.
-      if (session?.parentID || !session?.title) return
 
-      // Last in the system prompt, so a title change does not invalidate the cached parts before it.
-      if (Array.isArray(event.system)) event.system.push({ type: "text", text: instruction(session.title) })
+      // Subagent child sessions keep their task title from the parent
+      if (session?.parentID) return
+
+      const currentTitle = session?.title || "New session"
+
+      // Injected at the very end of the system prompt so it is immediately visible to the model
+      if (Array.isArray(event.system)) {
+        event.system.push({ type: "text", text: buildTitleInstruction(currentTitle) })
+      }
     })
   },
 }
