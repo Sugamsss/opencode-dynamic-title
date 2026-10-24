@@ -26,6 +26,9 @@ describe("execute hook", () => {
     // 9Router rewrites the namespace and keeps the original casing.
     expect(await repair("await tools.antigravity.session_rename({})")).toBe("await tools.opencode.session_rename({})")
     expect(await repair("await tools.Antigravity.session_rename({})")).toBe("await tools.opencode.session_rename({})")
+    // The namespace is held and used later, or reached through a bracket.
+    expect(await repair("const t = tools.antigravity; t.session_rename({})")).toBe("const t = tools.opencode; t.session_rename({})")
+    expect(await repair('tools.antigravity["session_rename"]({})')).toBe('tools.opencode["session_rename"]({})')
     expect(await repair('tools["antigravity"].session_rename({})')).toBe('tools["opencode"].session_rename({})')
     expect(await repair('namespace: "Antigravity"')).toBe('namespace: "opencode"')
     // A bare call throws "session_rename is not defined".

@@ -31,10 +31,13 @@ export const sanitizeToolNames = (event: any) => {
 // Only a real call is touched. The word also shows up in comments and in strings, and rewriting
 // those changes code the model meant to send.
 const NAMESPACE_CALL =
-  /(tools\.)antigravity(\.[a-zA-Z0-9_]+)|tools\[\s*(["'])antigravity(["'])\s*\]|(namespace\s*:\s*["'])antigravity\b/gi
+  // The namespace counts as a call when it is followed by a use: a dot, a bracket, or end of
+  // statement. That covers `tools.antigravity.session_rename()`, `tools.antigravity["session_rename"]`
+  // and `const t = tools.antigravity;`, while a mention in a comment is left untouched.
+  /(tools\.)antigravity(?=\s*[.[\n;])|tools\[\s*(["'])antigravity(["'])\s*\]|(namespace\s*:\s*["'])antigravity\b/gi
 export const fixNamespace = (code: string) =>
-  code.replace(NAMESPACE_CALL, (match, dotted: string, method: string, open: string, close: string, declared: string) => {
-    if (dotted) return `${dotted}opencode${method}`
+  code.replace(NAMESPACE_CALL, (match, dotted: string, open: string, close: string, declared: string) => {
+    if (dotted) return `${dotted}opencode`
     if (declared) return `${declared}opencode`
     // A mismatched pair such as tools["antigravity'] is not a real call.
     return open === close ? `tools[${open}opencode${close}]` : match
