@@ -2,6 +2,7 @@ import { describe, it, expect } from "bun:test"
 import plugin, {
   EXECUTE_REMINDER,
   buildTitleInstruction,
+  fixDoubledPath,
   fixNamespace,
   fixRenameCall,
   remindAtActTime,
@@ -55,6 +56,22 @@ describe("Code Mode call repairs", () => {
     expect(fixNamespace('namespace: "Antigravity"')).toBe('namespace: "opencode"')
   })
 
+  it("repairs the doubled tools path that models paste from the prompt", () => {
+    // Reproduced live: both throw "Unknown tool 'tools.opencode.session_rename'".
+    expect(fixDoubledPath('tools["tools.opencode.session_rename"]({})')).toBe('tools["opencode.session_rename"]({})')
+    expect(fixDoubledPath("tools.tools.opencode.session_rename({})")).toBe("tools.opencode.session_rename({})")
+    expect(fixDoubledPath("tools.opencode.session_rename({})")).toBe("tools.opencode.session_rename({})")
+  })
+
+  it("leaves the word antigravity alone when it is not a namespace call", () => {
+    for (const code of [
+      'search({ query: "antigravity bug" })',
+      'await tools.webfetch({ url: "https://example.com/antigravity" })',
+      "// tools.antigravity is rewritten by the gateway",
+    ])
+      expect(fixNamespace(code)).toBe(code)
+  })
+
   it("repairs bare rename calls without matching qualified names", () => {
     expect(fixRenameCall("await session_rename({")).toBe("await tools.opencode.session_rename({")
     expect(fixRenameCall("return session_rename({")).toBe("return tools.opencode.session_rename({")
@@ -105,6 +122,18 @@ describe("execute hook", () => {
     const event: any = { tool: "execute", input: { code: "await tools.antigravity.session_rename({}); return session_rename({})" } }
     await hooks["execute.before"](event)
     expect(event.input.code).toBe("await tools.opencode.session_rename({}); return tools.opencode.session_rename({})")
+  })
+
+  it("repairs a doubled path and a capitalised namespace in one call", async () => {
+    const hooks: Record<string, any> = {}
+    const ctx = {
+      tool: { hook: async (name: string, fn: any) => { hooks[name] = fn }, list: async () => [] },
+      session: { hook: async () => {}, get: async () => ({}) },
+    }
+    await (plugin as any).setup(ctx)
+    const event: any = { tool: "execute", input: { code: 'return tools["tools.opencode.session_rename"]({ title: "Kyoto" })' } }
+    await hooks["execute.before"](event)
+    expect(event.input.code).toBe('return tools["opencode.session_rename"]({ title: "Kyoto" })')
   })
 })
 

@@ -30,7 +30,7 @@ OpenCode names a session once, from the first message. A chat that starts with *
 
 5. **Subagents are skipped.** Child sessions (`parentID`) keep the task title their parent gave them.
 
-6. **`antigravity` namespace fix.** Some gateways rewrite "opencode" to "antigravity" in system prompts (9Router does this on its Antigravity `ag/` routes) and keep the original casing, so models call `tools.Antigravity.*`. A `ctx.tool.hook("execute.before")` maps `tools.antigravity.*`, `tools["antigravity"]` and `namespace: "antigravity"` back to `opencode`, case-insensitively, and stands down if a real `antigravity` namespace is ever registered. The same hook repairs a bare `session_rename(` to the full path, which otherwise throws "session_rename is not defined".
+6. **`antigravity` namespace fix.** Some gateways rewrite "opencode" to "antigravity" in system prompts (9Router does this on its Antigravity `ag/` routes) and keep the original casing, so models call `tools.Antigravity.*`. A `ctx.tool.hook("execute.before")` maps `tools.antigravity.<name>(`, `tools["antigravity"]` and `namespace: "antigravity"` back to `opencode`, case-insensitively, and stands down if a real `antigravity` namespace is ever registered. Only a real call is rewritten, so the word is left alone inside a string or a comment. The same hook repairs two more shapes that both fail at runtime: a bare `session_rename(`, which throws "session_rename is not defined", and a doubled path such as `tools["tools.opencode.session_rename"]` or `tools.tools.opencode.session_rename`, which throws `Unknown tool 'tools.opencode.session_rename'`.
 
 7. **Malformed history guard.** Before dispatch, a tool definition with a name outside `[a-zA-Z0-9_-]` is moved to a corrected key (core resolves tools by object identity, so the tool stays callable), and matching `tool-call` / `tool-result` parts are renamed on both sides so pairs stay intact. Stored history is never rewritten.
 
@@ -65,7 +65,7 @@ Set `DYNAMIC_TITLE_DEBUG=1` to print why an injection was skipped (session read 
 ## Development
 
 ```bash
-bun test          # 13 tests
+bun test          # 16 tests
 bunx tsc --noEmit
 ```
 

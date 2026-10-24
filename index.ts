@@ -28,8 +28,27 @@ export const sanitizeToolNames = (event: any) => {
 // 9Router rewrites "opencode" to "antigravity" in system prompts on ag/ routes, so those models
 // read the Code Mode catalog as tools.antigravity.*. Map those calls back to the real namespace.
 // Case matters: the rewrite keeps the original casing, so `OpenCode` arrives as `Antigravity`.
+// Only a real call is touched. The word also shows up in comments and in strings, and rewriting
+// those changes code the model meant to send.
+const NAMESPACE_CALL =
+  /(tools\.)antigravity(\.[a-zA-Z0-9_]+)|tools\[\s*(["'])antigravity(["'])\s*\]|(namespace\s*:\s*["'])antigravity\b/gi
 export const fixNamespace = (code: string) =>
-  code.replace(/(tools\.|tools\[\s*["']|namespace\s*:\s*["'])antigravity\b/gi, "$1opencode")
+  code.replace(NAMESPACE_CALL, (match, dotted: string, method: string, open: string, close: string, declared: string) => {
+    if (dotted) return `${dotted}opencode${method}`
+    if (declared) return `${declared}opencode`
+    // A mismatched pair such as tools["antigravity'] is not a real call.
+    return open === close ? `tools[${open}opencode${close}]` : match
+  })
+
+// Models copy the path out of prose and wrap it again, so the call arrives as
+// tools["tools.opencode.session_rename"] or tools.tools.opencode.session_rename. Both throw
+// "Unknown tool 'tools.opencode.session_rename'. Did you mean tools.opencode.session_rename?"
+const DOUBLED_PATH =
+  /tools\[\s*(["'])tools\.(opencode(?:\.[a-zA-Z0-9_]+)?)\1\s*\]|tools\.tools\.(opencode(?:\.[a-zA-Z0-9_]+)?)/g
+export const fixDoubledPath = (code: string) =>
+  code.replace(DOUBLED_PATH, (_match, _quote: string, bracketed: string, dotted: string) =>
+    bracketed ? `tools["${bracketed}"]` : `tools.${dotted}`,
+  )
 
 // Code Mode needs the full path; a bare call throws "session_rename is not defined".
 const BARE_RENAME = /(?<![\w.$"'])session_rename\s*\(/g
@@ -71,9 +90,9 @@ export default {
     await ctx.tool.hook("execute.before", async (event: any) => {
       const code = event.input?.code
       if (event.tool !== "execute" || typeof code !== "string") return
-      if (!code.includes("antigravity") && !code.includes("session_rename")) return
-      let next = code
-      if (code.includes("antigravity")) {
+      if (!/antigravity|session_rename|tools\.tools\./i.test(code)) return
+      let next = fixDoubledPath(code)
+      if (/antigravity/i.test(next)) {
         // Leave the code alone if a real "antigravity" namespace is ever registered.
         const tools = await ctx.tool.list()
         if (!tools.some((tool: any) => tool.options?.namespace === "antigravity")) next = fixNamespace(next)
