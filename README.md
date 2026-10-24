@@ -65,7 +65,7 @@ Set `DYNAMIC_TITLE_DEBUG=1` to print why an injection was skipped (session read 
 ## Development
 
 ```bash
-bun test          # 16 tests
+bun test          # 14 tests
 bunx tsc --noEmit
 ```
 
